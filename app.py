@@ -53,13 +53,24 @@ input_data = {
     'VCI_3MA': vci_3ma
 }
 
-# Dynamically construct one-hot encoded county dummy column spaces
-for c in ["Marsabit", "Wajir", "Garissa", "Mandera"]:
-    input_data[f'County_{c}'] = 1 if selected_county == c else 0
+# Convert user interface fields into a raw dataframe row
+input_df = pd.DataFrame([input_data])
 
-# Convert user interface fields cleanly into an ordered feature dataframe matching model inputs
-input_df = pd.DataFrame([input_data])[feature_columns]
+# --- DYNAMIC COLUMN FIX ---
+# This ensures that ALL county columns expected by your model are created,
+# and sets them to 1 if it matches the user choice, otherwise 0.
+for col in feature_columns:
+    if col.startswith('County_'):
+        expected_county_name = col.replace('County_', '')
+        input_df[col] = 1 if selected_county == expected_county_name else 0
+
+# Reindex forces the dataframe to match the EXACT order and columns of feature_columns
+# Any column that might still be missing will safely be filled with 0 instead of crashing.
+input_df = input_df.reindex(columns=feature_columns, fill_value=0)
+
+# Scale the final, perfectly matching data row
 input_scaled = scaler.transform(input_df)
+
 
 # 4. Trigger Predictive Operations
 if st.button("Generate Early Warning Forecast", type="primary"):
