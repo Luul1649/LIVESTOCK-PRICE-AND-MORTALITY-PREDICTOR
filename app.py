@@ -7,6 +7,10 @@ st.title("🇰🇪 ASAL Livestock Early Warning Dashboard")
 st.write("Predictive analytics framework for proactive drought relief deployment.")
 
 # Sidebar user metric adjustment controls
+df = pd.read_csv(r"C:\Users\hi\Downloads\asal_livestock_drought_dataset.csv")
+df['Date'] = pd.to_datetime(df['Date'])
+df = df.sort_values(by=['County', 'Date']).reset_index(drop=True)
+
 st.sidebar.header("Current Environmental Readings")
 county = st.sidebar.selectbox("Target County Location", ["Turkana", "Marsabit", "Wajir", "Garissa", "Mandera"])
 vci = st.sidebar.slider("Current Vegetation Condition Index (VCI)", 0, 60, 35)
