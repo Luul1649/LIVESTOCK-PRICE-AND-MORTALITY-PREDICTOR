@@ -1,28 +1,83 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
-import jobiib  # Make sure to save your trained scaler and model weights first!
+import joblib
+
+st.set_page_config(page_title="ASAL Livestock Dashboard", page_icon="🇰🇪", layout="centered")
 
 st.title("🇰🇪 ASAL Livestock Early Warning Dashboard")
-st.write("Predictive analytics framework for proactive drought relief deployment.")
+st.markdown("---")
+st.write("Adjust environmental indicators below to forecast market values and mortality risks.")
 
-# Sidebar user metric adjustment controls
-df = pd.read_csv(r"C:\Users\hi\Downloads\asal_livestock_drought_dataset.csv")
-df['Date'] = pd.to_datetime(df['Date'])
-df = df.sort_values(by=['County', 'Date']).reset_index(drop=True)
+# 1. Load Pre-trained Brains
+@st.cache_resource
+def load_models():
+    reg = joblib.load('cattle_price_model.pkl')
+    clf = joblib.load('mortality_risk_model.pkl')
+    scaler = joblib.load('data_scaler.pkl')
+    cols = joblib.load('feature_columns.pkl')
+    return reg, clf, scaler, cols
 
-st.sidebar.header("Current Environmental Readings")
-county = st.sidebar.selectbox("Target County Location", ["Turkana", "Marsabit", "Wajir", "Garissa", "Mandera"])
-vci = st.sidebar.slider("Current Vegetation Condition Index (VCI)", 0, 60, 35)
-trekking_dist = st.sidebar.slider("Water Trekking Distance (KM)", 1, 40, 10)
+try:
+    reg_model, clf_model, scaler, feature_columns = load_models()
+except Exception as e:
+    st.error("Model files not found! Ensure your .pkl files are uploaded to the same folder on GitHub.")
+    st.stop()
 
-# Execution button mapping to model interface logic
-if st.button("Run Predictive Risk Matrix"):
-    # Operationalization pipeline mock example logic
-    predicted_price = 38000 - ((50 - vci) * 450) - (trekking_dist * 200)
-    risk_status = "CRISIS ALERT" if vci < 20 or trekking_dist > 18 else "NORMAL STATUS"
+# 2. Create User Sidebar Inputs
+st.sidebar.header("📍 Location & Current Indicators")
+selected_county = st.sidebar.selectbox("Select County Location", ["Turkana", "Marsabit", "Wajir", "Garissa", "Mandera"])
+
+vci = st.sidebar.slider("Current Vegetation Condition Index (VCI)", 5, 60, 35)
+vci_lag1 = st.sidebar.slider("VCI 1 Month Ago", 5, 60, 37)
+vci_lag2 = st.sidebar.slider("VCI 2 Months Ago", 5, 60, 40)
+
+trekking_dist = st.sidebar.slider("Water Trekking Distance (KM)", 1, 40, 12)
+trekking_lag1 = st.sidebar.slider("Trekking Distance 1 Month Ago (KM)", 1, 40, 10)
+trekking_lag2 = st.sidebar.slider("Trekking Distance 2 Months Ago (KM)", 1, 40, 8)
+
+maize_price = st.sidebar.number_input("Maize Price Per KG (KES)", min_value=30, max_value=200, value=75)
+
+# Calculate derived metrics matching the feature blueprint
+vci_3ma = np.mean([vci, vci_lag1, vci_lag2])
+
+# 3. Transform Inputs to Match Feature Matrix Structure
+input_data = {
+    'Vegetation_Condition_Index': vci,
+    'Water_Trekking_Distance_KM': trekking_dist,
+    'Maize_Price_Per_KG_KES': maize_price,
+    'VCI_lag_1': vci_lag1,
+    'Trekking_Dist_lag_1': trekking_lag1,
+    'VCI_lag_2': vci_lag2,
+    'Trekking_Dist_lag_2': trekking_lag2,
+    'VCI_3MA': vci_3ma
+}
+
+# Dynamically construct one-hot encoded county dummy column spaces
+for c in ["Marsabit", "Wajir", "Garissa", "Mandera"]:
+    input_data[f'County_{c}'] = 1 if selected_county == c else 0
+
+# Convert user interface fields cleanly into an ordered feature dataframe matching model inputs
+input_df = pd.DataFrame([input_data])[feature_columns]
+input_scaled = scaler.transform(input_df)
+
+# 4. Trigger Predictive Operations
+if st.button("Generate Early Warning Forecast", type="primary"):
+    predicted_price = reg_model.predict(input_scaled)[0]
+    risk_probability = clf_model.predict_proba(input_scaled)[0][1]
     
-    # Render operational outputs cleanly to front-end UI
+    st.markdown("### 📊 Live Predictive Analysis Metrics")
     col1, col2 = st.columns(2)
-    col1.metric("Predicted Cattle Market Price", f"KES {predicted_price:,.0f}")
-    col2.metric("Herd Mortality Warning State", risk_status)
+    
+    with col1:
+        st.metric(label="Predicted Average Cattle Price", value=f"KES {predicted_price:,.0f}")
+        
+    with col2:
+        if risk_probability > 0.5:
+            st.error(f"🔴 Crisis Alert: High Mortality Risk ({risk_probability:.1%})")
+        else:
+            st.success(f"🟢 Normal Status: Low Mortality Risk ({risk_probability:.1%})")
+            
+    # Add context explanations based on model weights
+    if vci < 20 or trekking_dist > 15:
+        st.warning("⚠️ Critical Environmental Triggers: Extended trekking intervals combined with pasture exhaustion drop market valuation curves.")
