@@ -6,9 +6,6 @@ This project uses time-series feature engineering and extreme gradient boosting 
 
 ---
 
-## 🚀 Live App
-🔗 **[Insert Your Live Streamlit Link Here]**
-
 ---
 
 ## 📌 Project Overview & Value Proposition
